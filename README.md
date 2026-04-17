@@ -3,7 +3,8 @@
 Comparison of BLDC motors and integrated rotary actuators sourced from [Design Moteur.pdf](Design%20Moteur.pdf). Raw data is in [motors.csv](motors.csv).
 
 ## Interactive explorer (Streamlit)
-!(preview)[image.png]
+![preview](image.png)
+
 The dataset is also browsable as an interactive dashboard built with Streamlit + Plotly — filter by manufacturer, reducer family and weight, then drill into torque-vs-cost, torque-vs-mass, density-vs-power, geometry, rankings and a custom X/Y scatter.
 
 Run it locally:
