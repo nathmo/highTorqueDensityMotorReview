@@ -203,7 +203,7 @@ filtered = df[
 ].copy()
 mask_mass = (
     filtered["Weight_kg_num"].between(*mass_range)
-    | (filtered["Weight_kg_num"].isna() & ~exclude_no_weight)
+    | (filtered["Weight_kg_num"].isna() & (not exclude_no_weight))
 )
 filtered = filtered[mask_mass]
 
@@ -373,7 +373,7 @@ def scatter(
                     sub, x_col, y_col, x_label, y_label,
                     False, False, size_col, color_col, "Linear",
                 ),
-                use_container_width=True,
+                width="stretch",
                 key=f"{key}_linear",
             )
         with c2:
@@ -382,7 +382,7 @@ def scatter(
                     sub, x_col, y_col, x_label, y_label,
                     True, True, size_col, color_col, "Log–log",
                 ),
-                use_container_width=True,
+                width="stretch",
                 key=f"{key}_loglog",
             )
     else:
@@ -391,7 +391,7 @@ def scatter(
                 sub, x_col, y_col, x_label, y_label,
                 log_x, log_y, size_col, color_col, "",
             ),
-            use_container_width=True,
+            width="stretch",
             key=key,
         )
 
@@ -587,7 +587,7 @@ with tab_rankings:
         labels={"Nm_per_kg_rated_num": "Rated Nm/kg", "Label": ""},
     )
     fig.update_layout(height=520, margin=dict(l=10, r=10, t=10, b=10))
-    st.plotly_chart(fig, use_container_width=True, key="rank_rated_density")
+    st.plotly_chart(fig, width="stretch", key="rank_rated_density")
 
     st.subheader("Top peak torque density (Nm/kg)")
     top_peak = (
@@ -603,7 +603,7 @@ with tab_rankings:
         labels={"Nm_per_kg_peak_num": "Peak Nm/kg", "Label": ""},
     )
     fig.update_layout(height=520, margin=dict(l=10, r=10, t=10, b=10))
-    st.plotly_chart(fig, use_container_width=True, key="rank_peak_density")
+    st.plotly_chart(fig, width="stretch", key="rank_peak_density")
 
     st.subheader("Rated torque per € (value)")
     val = ranked.dropna(subset=["Rated_Torque_Nm_num", "Price_EUR_num"]).copy()
@@ -622,7 +622,7 @@ with tab_rankings:
             labels={"Nm_per_EUR": "Nm per €", "Label": ""},
         )
         fig.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=10))
-        st.plotly_chart(fig, use_container_width=True, key="rank_value")
+        st.plotly_chart(fig, width="stretch", key="rank_value")
 
 with tab_custom:
     st.subheader("Pick any X / Y combination (ratios supported)")
@@ -645,6 +645,10 @@ with tab_custom:
                 index=default_num,
                 key=f"{prefix}_num",
             )
+            num_sqrt = st.checkbox(
+                "Take √ of numerator",
+                key=f"{prefix}_num_sqrt",
+            )
         with cB:
             den = st.selectbox(
                 f"{prefix} — divide by (optional)",
@@ -652,22 +656,45 @@ with tab_custom:
                 index=0 if default_den is None else default_den + 1,
                 key=f"{prefix}_den",
             )
-        return num, den
+            den_sqrt = st.checkbox(
+                "Take √ of denominator",
+                key=f"{prefix}_den_sqrt",
+                disabled=False,
+            )
+        return num, den, num_sqrt, den_sqrt
 
-    def _resolve_axis(data: pd.DataFrame, num: str, den: str, col_name: str):
+    def _resolve_axis(
+        data: pd.DataFrame,
+        num: str,
+        den: str,
+        num_sqrt: bool,
+        den_sqrt: bool,
+        col_name: str,
+    ):
         """Attach a computed column to data and return (label, column_name)."""
         num_col = NUMERIC_COLUMNS[num]
+        num_series = data[num_col] ** 0.5 if num_sqrt else data[num_col]
+        num_label = f"√({num})" if num_sqrt else num
+
         if den == NONE:
-            data[col_name] = data[num_col]
-            return num, col_name
+            data[col_name] = num_series
+            return num_label, col_name
+
         den_col = NUMERIC_COLUMNS[den]
-        data[col_name] = data[num_col] / data[den_col].replace(0, pd.NA)
-        return f"{num} / {den}", col_name
+        den_series = data[den_col] ** 0.5 if den_sqrt else data[den_col]
+        den_label = f"√({den})" if den_sqrt else den
+
+        data[col_name] = num_series / den_series.replace(0, pd.NA)
+        return f"{num_label} / {den_label}", col_name
 
     st.markdown("**X axis**")
-    x_num, x_den = _axis_picker("X", default_num=6, default_den=None)
+    x_num, x_den, x_num_sqrt, x_den_sqrt = _axis_picker(
+        "X", default_num=6, default_den=None
+    )
     st.markdown("**Y axis**")
-    y_num, y_den = _axis_picker("Y", default_num=0, default_den=None)
+    y_num, y_den, y_num_sqrt, y_den_sqrt = _axis_picker(
+        "Y", default_num=0, default_den=None
+    )
 
     c3, c4, c5 = st.columns(3)
     with c3:
@@ -685,8 +712,12 @@ with tab_custom:
         )
 
     plot_df = filtered.copy()
-    x_label, x_col = _resolve_axis(plot_df, x_num, x_den, "__x_custom")
-    y_label, y_col = _resolve_axis(plot_df, y_num, y_den, "__y_custom")
+    x_label, x_col = _resolve_axis(
+        plot_df, x_num, x_den, x_num_sqrt, x_den_sqrt, "__x_custom"
+    )
+    y_label, y_col = _resolve_axis(
+        plot_df, y_num, y_den, y_num_sqrt, y_den_sqrt, "__y_custom"
+    )
     size_col = NUMERIC_COLUMNS[size_key] if size_key != NONE else None
 
     if show_both:
@@ -771,7 +802,7 @@ with tab_table:
             )
     else:
         table = filtered[display_cols]
-    st.dataframe(table, use_container_width=True, hide_index=True)
+    st.dataframe(table, width="stretch", hide_index=True)
 
     st.download_button(
         "Download filtered data as CSV",
