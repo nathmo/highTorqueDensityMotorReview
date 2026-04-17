@@ -98,7 +98,7 @@ AKE90-8 and the HPJ-DT series publish only peak torque, so they cannot be ranked
 
 ## Sources
 
-- Soceboz FL102HSV series — distributor "hoel"
+- Soceboz FL102HSV series : guesstimate
 - CubeMars — <https://www.cubemars.com/fr>
 - RSL ETH DynaDrive — <https://rsl.ethz.ch/robots-media/actuators/DynaDrives.html>
 - MAB Robotics — <https://www.mabrobotics.pl/product-page/ma-h>
