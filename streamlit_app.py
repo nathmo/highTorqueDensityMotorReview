@@ -75,8 +75,6 @@ def load_data() -> tuple[pd.DataFrame, dict]:
         "Diameter_mm": _first_number,
         "Length_mm": _first_number,
         "Price_EUR": _first_number,
-        "Nm_per_kg_rated": _first_number,
-        "Nm_per_kg_peak": _max_number,
     }
     for col, fn in parsers.items():
         df[col + "_num"] = df[col].apply(fn)
@@ -115,19 +113,14 @@ def load_data() -> tuple[pd.DataFrame, dict]:
         df.loc[mask_b, filled_b] = df.loc[mask_b, filled_a] * ratio
         df.loc[mask_b, flag_b] = True
 
-    # Nm/kg can now be back-derived from filled torque + weight when missing.
-    df["Nm_per_kg_rated_num_filled"] = df["Nm_per_kg_rated_num"].fillna(
-        df["Rated_Torque_Nm_num_filled"] / df["Weight_kg_num"]
-    )
-    df["Nm_per_kg_peak_num_filled"] = df["Nm_per_kg_peak_num"].fillna(
-        df["Peak_Torque_Nm_num_filled"] / df["Weight_kg_num"]
-    )
-    df["Nm_per_kg_rated_num_is_est"] = (
-        df["Nm_per_kg_rated_num"].isna() & df["Nm_per_kg_rated_num_filled"].notna()
-    )
-    df["Nm_per_kg_peak_num_is_est"] = (
-        df["Nm_per_kg_peak_num"].isna() & df["Nm_per_kg_peak_num_filled"].notna()
-    )
+    # Always derive Nm/kg from torque + weight — ignore any precomputed CSV
+    # columns, which have been found inconsistent with the row's own fields.
+    df["Nm_per_kg_rated_num"] = df["Rated_Torque_Nm_num"] / df["Weight_kg_num"]
+    df["Nm_per_kg_peak_num"] = df["Peak_Torque_Nm_num"] / df["Weight_kg_num"]
+    df["Nm_per_kg_rated_num_filled"] = df["Rated_Torque_Nm_num_filled"] / df["Weight_kg_num"]
+    df["Nm_per_kg_peak_num_filled"] = df["Peak_Torque_Nm_num_filled"] / df["Weight_kg_num"]
+    df["Nm_per_kg_rated_num_is_est"] = df["Rated_Torque_Nm_num_is_est"]
+    df["Nm_per_kg_peak_num_is_est"] = df["Peak_Torque_Nm_num_is_est"]
 
     return df, ratios_info
 
@@ -773,8 +766,8 @@ with tab_table:
         "Weight_kg",
         "Diameter_mm",
         "Length_mm",
-        "Nm_per_kg_rated",
-        "Nm_per_kg_peak",
+        "Nm_per_kg_rated_num",
+        "Nm_per_kg_peak_num",
         "IP",
         "Communication",
         "Price_EUR",
@@ -791,8 +784,8 @@ with tab_table:
             "Max_Momentary_Torque_Nm": "Max_Momentary_Torque_Nm_num_filled",
             "Rated_Speed_RPM": "Rated_Speed_RPM_num_filled",
             "Max_Speed_RPM": "Max_Speed_RPM_num_filled",
-            "Nm_per_kg_rated": "Nm_per_kg_rated_num_filled",
-            "Nm_per_kg_peak": "Nm_per_kg_peak_num_filled",
+            "Nm_per_kg_rated_num": "Nm_per_kg_rated_num_filled",
+            "Nm_per_kg_peak_num": "Nm_per_kg_peak_num_filled",
         }
         for raw_col, filled_col in est_display.items():
             flag_col = filled_col.replace("_filled", "_is_est")
