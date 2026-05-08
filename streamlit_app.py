@@ -389,8 +389,75 @@ def scatter(
         )
 
 
+# -------------------- Custom-axis helpers (shared by explorer + rankings) --------------------
+NONE = "(none)"
+_NUMERIC_KEYS = list(NUMERIC_COLUMNS)
+
+
+def _axis_picker(prefix: str, default_num: int, default_den: int | None):
+    cA, cB = st.columns(2)
+    with cA:
+        num = st.selectbox(
+            f"{prefix} — numerator",
+            _NUMERIC_KEYS,
+            index=default_num,
+            key=f"{prefix}_num",
+        )
+        num_sqrt = st.checkbox(
+            "Take √ of numerator",
+            key=f"{prefix}_num_sqrt",
+        )
+    with cB:
+        den = st.selectbox(
+            f"{prefix} — divide by (optional)",
+            [NONE] + _NUMERIC_KEYS,
+            index=0 if default_den is None else default_den + 1,
+            key=f"{prefix}_den",
+        )
+        den_sqrt = st.checkbox(
+            "Take √ of denominator",
+            key=f"{prefix}_den_sqrt",
+            disabled=False,
+        )
+    return num, den, num_sqrt, den_sqrt
+
+
+def _resolve_axis(
+    data: pd.DataFrame,
+    num: str,
+    den: str,
+    num_sqrt: bool,
+    den_sqrt: bool,
+    col_name: str,
+):
+    """Attach a computed column to data and return (label, column_name)."""
+    num_col = NUMERIC_COLUMNS[num]
+    num_series = data[num_col] ** 0.5 if num_sqrt else data[num_col]
+    num_label = f"√({num})" if num_sqrt else num
+
+    if den == NONE:
+        data[col_name] = num_series
+        return num_label, col_name
+
+    den_col = NUMERIC_COLUMNS[den]
+    den_series = data[den_col] ** 0.5 if den_sqrt else data[den_col]
+    den_label = f"√({den})" if den_sqrt else den
+
+    data[col_name] = num_series / den_series.replace(0, pd.NA)
+    return f"{num_label} / {den_label}", col_name
+
+
 # -------------------- Tabs --------------------
-tab_torque, tab_density, tab_speed, tab_size, tab_rankings, tab_custom, tab_table = st.tabs(
+(
+    tab_torque,
+    tab_density,
+    tab_speed,
+    tab_size,
+    tab_rankings,
+    tab_custom,
+    tab_custom_rank,
+    tab_table,
+) = st.tabs(
     [
         "Torque vs cost / mass",
         "Density vs power",
@@ -398,6 +465,7 @@ tab_torque, tab_density, tab_speed, tab_size, tab_rankings, tab_custom, tab_tabl
         "Geometry",
         "Rankings",
         "Custom explorer",
+        "Custom rankings",
         "Data table",
     ]
 )
@@ -626,59 +694,7 @@ with tab_custom:
         "on X to see price vs power density."
     )
 
-    NONE = "(none)"
-    numeric_keys = list(NUMERIC_COLUMNS)
-
-    def _axis_picker(prefix: str, default_num: int, default_den: int | None):
-        cA, cB = st.columns(2)
-        with cA:
-            num = st.selectbox(
-                f"{prefix} — numerator",
-                numeric_keys,
-                index=default_num,
-                key=f"{prefix}_num",
-            )
-            num_sqrt = st.checkbox(
-                "Take √ of numerator",
-                key=f"{prefix}_num_sqrt",
-            )
-        with cB:
-            den = st.selectbox(
-                f"{prefix} — divide by (optional)",
-                [NONE] + numeric_keys,
-                index=0 if default_den is None else default_den + 1,
-                key=f"{prefix}_den",
-            )
-            den_sqrt = st.checkbox(
-                "Take √ of denominator",
-                key=f"{prefix}_den_sqrt",
-                disabled=False,
-            )
-        return num, den, num_sqrt, den_sqrt
-
-    def _resolve_axis(
-        data: pd.DataFrame,
-        num: str,
-        den: str,
-        num_sqrt: bool,
-        den_sqrt: bool,
-        col_name: str,
-    ):
-        """Attach a computed column to data and return (label, column_name)."""
-        num_col = NUMERIC_COLUMNS[num]
-        num_series = data[num_col] ** 0.5 if num_sqrt else data[num_col]
-        num_label = f"√({num})" if num_sqrt else num
-
-        if den == NONE:
-            data[col_name] = num_series
-            return num_label, col_name
-
-        den_col = NUMERIC_COLUMNS[den]
-        den_series = data[den_col] ** 0.5 if den_sqrt else data[den_col]
-        den_label = f"√({den})" if den_sqrt else den
-
-        data[col_name] = num_series / den_series.replace(0, pd.NA)
-        return f"{num_label} / {den_label}", col_name
+    numeric_keys = _NUMERIC_KEYS
 
     st.markdown("**X axis**")
     x_num, x_den, x_num_sqrt, x_den_sqrt = _axis_picker(
@@ -744,6 +760,86 @@ with tab_custom:
             log_y=log_y,
             key="custom_single",
         )
+
+with tab_custom_rank:
+    st.subheader("Rank by any metric or ratio")
+    st.caption(
+        "Build a ranking from any single metric or ratio of two. "
+        "Example: **Rated torque / Price (EUR)** descending = best continuous torque per €. "
+        "**Weight (kg) / Rated torque (Nm)** ascending = lightest motor per Nm."
+    )
+
+    # Rankings stay honest: always exclude synthetic rows when estimates are on.
+    rank_source = filtered[~filtered["Synthetic"]] if use_estimates else filtered
+    if use_estimates:
+        st.caption(
+            "Synthetic rows excluded from this ranking — only published values are ranked."
+        )
+
+    st.markdown("**Metric**")
+    m_num, m_den, m_num_sqrt, m_den_sqrt = _axis_picker(
+        "Rank", default_num=10, default_den=None
+    )
+
+    cR1, cR2 = st.columns(2)
+    with cR1:
+        top_n = st.number_input(
+            "How many to show", min_value=3, max_value=50, value=15, step=1,
+            key="rank_top_n",
+        )
+    with cR2:
+        order = st.radio(
+            "Order", ["Highest first", "Lowest first"], horizontal=True,
+            key="rank_order",
+        )
+
+    rank_df = rank_source.copy()
+    metric_label, metric_col = _resolve_axis(
+        rank_df, m_num, m_den, m_num_sqrt, m_den_sqrt, "__rank_metric"
+    )
+    rank_df = rank_df.dropna(subset=[metric_col])
+
+    if rank_df.empty:
+        st.info("No rows have values for the selected metric.")
+    else:
+        ascending = order == "Lowest first"
+        ranked_top = (
+            rank_df.nsmallest(int(top_n), metric_col)
+            if ascending
+            else rank_df.nlargest(int(top_n), metric_col)
+        )
+        # Plot bars in worst→best order so the best ends up at the top.
+        plot_order = ranked_top.sort_values(metric_col, ascending=not ascending)
+        fig = px.bar(
+            plot_order,
+            x=metric_col,
+            y="Label",
+            orientation="h",
+            hover_data={
+                "Manufacturer": True,
+                "Reducer": True,
+                "Rated_Torque_Nm": True,
+                "Peak_Torque_Nm": True,
+                "Weight_kg": True,
+                "Price_EUR": True,
+                metric_col: ":.3f",
+                "Label": False,
+            },
+            labels={metric_col: metric_label, "Label": ""},
+        )
+        fig.update_traces(marker_color="#4C78A8")
+        fig.update_yaxes(categoryorder="array", categoryarray=plot_order["Label"].tolist())
+        fig.update_layout(
+            height=max(360, 28 * len(plot_order) + 80),
+            margin=dict(l=10, r=10, t=10, b=10),
+        )
+        st.plotly_chart(fig, width="stretch", key="custom_rank_chart")
+
+        with st.expander("Show ranking as a table"):
+            tbl_cols = ["Manufacturer", "Model", "Reducer", metric_col]
+            tbl = ranked_top[tbl_cols].rename(columns={metric_col: metric_label})
+            tbl.insert(0, "Rank", range(1, len(tbl) + 1))
+            st.dataframe(tbl, width="stretch", hide_index=True)
 
 with tab_table:
     st.subheader("Filtered dataset")
