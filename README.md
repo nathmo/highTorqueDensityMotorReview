@@ -105,3 +105,15 @@ AKE90-8 and the HPJ-DT series publish only peak torque, so they cannot be ranked
 - ZeroErr eRob — <https://en.zeroerr.cn/rotary_actuators>
 - Maxon HEJ / HPJ-DT — <https://global.maxongroup.com/high-efficiency-joints>
 - MyActuator — <https://www.myactuator.com/product>
+
+
+# TODO 
+kt kv link
+km (Nm/sqrt(W(thermique / RI^2)))
+eta plot
+mass
+price
+limits
+ratio reduction
+rendement gear (back + forward)
+
