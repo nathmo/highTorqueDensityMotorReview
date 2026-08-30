@@ -40,6 +40,4 @@ The modeling follows *"How to Model Brushless Electric Motors for the Design of
 Lightweight Robotic Systems"* (Lee et al., [arXiv:2310.00080](https://arxiv.org/abs/2310.00080),
 local copy [ModelBLDC.pdf](ModelBLDC.pdf)).
 
-Original comparison data was sourced from [Design Moteur.pdf](Design%20Moteur.pdf).
-
 for more information, read [IMPLEMENTATION.md](IMPLEMENTATION.md)
