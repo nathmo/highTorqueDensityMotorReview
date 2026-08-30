@@ -1,4 +1,4 @@
-# High Torque Density Motor Review
+# Robotic actuator map
 
 A component-layered database and interactive explorer for BLDC **motors**,
 **gearboxes**, **drivers**, and integrated **actuators** plus a **builder** that
