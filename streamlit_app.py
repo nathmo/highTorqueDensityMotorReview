@@ -12,6 +12,7 @@ Derived quantities are computed live and never written back to the CSVs.
 
 from __future__ import annotations
 
+import csv
 import re
 from pathlib import Path
 
@@ -74,6 +75,44 @@ def _to_num(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
 # --------------------------------------------------------------------------- #
 # Loaders
 # --------------------------------------------------------------------------- #
+def _ragged_rows(path: Path) -> list[tuple[int, int, int]]:
+    """Return (line_no, field_count, expected) for rows that don't match the header."""
+    with path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.reader(handle)
+        header = next(reader, None)
+        if header is None:
+            return []
+        width = len(header)
+        return [
+            (i, len(row), width)
+            for i, row in enumerate(reader, start=2)
+            if row and len(row) != width
+        ]
+
+
+def _read_csv(name: str) -> pd.DataFrame:
+    """Read a dataset CSV, reporting tokenizer errors as readable app content.
+
+    A stray comma in an unquoted free-text column (Notes, Source, ...) makes
+    pandas raise a bare ParserError, whose message Streamlit Cloud redacts.
+    Pinpoint the offending lines and render them instead of crashing blind.
+    """
+    path = HERE / name
+    try:
+        return pd.read_csv(path)
+    except pd.errors.ParserError:
+        detail = "; ".join(
+            f"line {line} has {got} fields, expected {want}"
+            for line, got, want in _ragged_rows(path)
+        )
+        st.error(
+            f"`{name}` could not be parsed: {detail or 'malformed CSV'}. "
+            "A comma inside an unquoted field is the usual cause — wrap the "
+            "value in double quotes."
+        )
+        st.stop()
+
+
 ESTIMATION_PAIRS = [
     ("Rated_Torque_Nm_num", "Peak_Torque_Nm_num"),
     ("Peak_Torque_Nm_num", "Max_Momentary_Torque_Nm_num"),
@@ -83,7 +122,7 @@ ESTIMATION_PAIRS = [
 
 @st.cache_data
 def load_actuators() -> tuple[pd.DataFrame, dict]:
-    df = pd.read_csv(HERE / "actuators.csv")
+    df = _read_csv("actuators.csv")
     parsers = {
         "Voltage_V": _max_number,
         "Rated_Torque_Nm": _first_number,
@@ -146,7 +185,7 @@ MOTOR_NUM = [
 
 @st.cache_data
 def load_motors() -> pd.DataFrame:
-    df = pd.read_csv(HERE / "motors.csv")
+    df = _read_csv("motors.csv")
     df = _to_num(df, MOTOR_NUM)
     for c in MOTOR_STR_TAGS:
         if c in df.columns:
@@ -169,7 +208,7 @@ GEARBOX_NUM = [
 
 @st.cache_data
 def load_gearboxes() -> pd.DataFrame:
-    df = pd.read_csv(HERE / "gearboxes.csv")
+    df = _read_csv("gearboxes.csv")
     df = _to_num(df, GEARBOX_NUM)
     df["Label"] = df["manufacturer"] + " — " + df["model"]
     return df
@@ -180,7 +219,7 @@ DRIVER_NUM = ["Cont_Current_A", "Peak_Current_A", "Bus_V_min", "Bus_V_max", "Mas
 
 @st.cache_data
 def load_drivers() -> pd.DataFrame:
-    df = pd.read_csv(HERE / "drivers.csv")
+    df = _read_csv("drivers.csv")
     df = _to_num(df, DRIVER_NUM)
     df["Label"] = df["manufacturer"] + " — " + df["model"]
     return df
